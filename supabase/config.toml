@@ -1,0 +1,16 @@
+project_id = "lottolab-cloud"
+
+[functions.generate-prediction]
+verify_jwt = true
+
+[functions.lock-prediction]
+verify_jwt = true
+
+[functions.get-prediction-state]
+verify_jwt = true
+
+[functions.delete-prediction]
+verify_jwt = true
+
+[functions.sync-draws]
+verify_jwt = false
