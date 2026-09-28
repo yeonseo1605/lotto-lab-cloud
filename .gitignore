@@ -4,4 +4,5 @@ dist/
 .env.local
 .supabase/
 supabase/.temp/
+.cron-secret
 *.log
