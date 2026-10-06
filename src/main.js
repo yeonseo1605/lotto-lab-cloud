@@ -1,4 +1,5 @@
 import './styles.css'
+import './spacing.css'
 import {supabase,configured} from './supabase.js'
 
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);let session=null,current=null

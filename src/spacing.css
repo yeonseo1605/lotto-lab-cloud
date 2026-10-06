@@ -1,0 +1,12 @@
+/* Keep every page's first card directly under the shared menu bar. */
+nav {
+  padding-bottom: 0;
+}
+
+main {
+  padding-top: 0;
+}
+
+.page > .card:first-child {
+  margin-top: 0;
+}
