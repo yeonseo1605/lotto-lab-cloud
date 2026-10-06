@@ -1,0 +1,56 @@
+.probability {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin: 14px 0 8px;
+}
+
+.probability > div {
+  padding: 12px 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #091422;
+  text-align: center;
+}
+
+.probability span,
+.probability small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.probability strong {
+  display: block;
+  margin: 4px 0;
+  font-size: 17px;
+}
+
+.probability .gain {
+  border-color: #28745b;
+  background: #0b251f;
+}
+
+.probability .gain strong { color: var(--accent); }
+
+.probability-note {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+@media (max-width: 520px) {
+  .probability { grid-template-columns: 1fr; }
+  .probability > div {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    text-align: left;
+  }
+  .probability strong {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+  }
+  .probability small { margin-top: 2px; }
+}

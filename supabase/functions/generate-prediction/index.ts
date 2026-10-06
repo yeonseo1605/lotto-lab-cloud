@@ -26,11 +26,11 @@ Deno.serve(async req=>{
     if(body.action!=='generate')return json({error:'생성 버튼을 통한 명시적 요청만 허용됩니다.'},400);
     const attempt=(count||0)+1;
     if(attempt>max)return json({error:`이번 회차는 최대 ${max}회까지 생성할 수 있습니다.`},409);
-    const reason='1~45 균등 무작위 30개 · 5게임 간 번호 중복 없음',seed=crypto.randomUUID(),tickets=portfolio(draws,seed),encoded=new TextEncoder().encode(JSON.stringify({targetDraw,tickets,seed,version:VERSION})),contentHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',encoded))).map(x=>x.toString(16).padStart(2,'0')).join('');
+    const reason='5등 이상 11.8679% · 독립 자동 11.3624% · +0.5056%p',seed=crypto.randomUUID(),tickets=portfolio(draws,seed),encoded=new TextEncoder().encode(JSON.stringify({targetDraw,tickets,seed,version:VERSION})),contentHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',encoded))).map(x=>x.toString(16).padStart(2,'0')).join('');
     const inserted=await admin.from('prediction_batches').insert({user_id:user.id,target_draw:targetDraw,strategy_used:'randomCoverage',reason,seed,model_version:VERSION,history_end:historyEnd,attempt_no:attempt,max_attempts:max,content_hash:contentHash}).select().single();
     if(inserted.error)throw inserted.error;
     const ti=await admin.from('prediction_tickets').insert(tickets.map((numbers,i)=>({batch_id:inserted.data.id,ticket_no:i+1,numbers})));
     if(ti.error)throw ti.error;
-    return json({batchId:inserted.data.id,targetDraw,tickets,strategy:'randomCoverage',strategyLabel:'분산형 자동 조합',reason,attemptNo:attempt,maxAttempts:max,hash:contentHash});
+    return json({batchId:inserted.data.id,targetDraw,tickets,strategy:'randomCoverage',strategyLabel:'확률 분산 최적화',reason,probability:{atLeastFifth:0.11867929763562209,independentAuto:0.11362354670380292,gainPoints:0.00505575093181916},attemptNo:attempt,maxAttempts:max,hash:contentHash});
   }catch(e){return json({error:e instanceof Error?e.message:String(e)},500)}
 });
