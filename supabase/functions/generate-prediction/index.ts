@@ -26,7 +26,7 @@ Deno.serve(async req=>{
     if(body.action!=='generate')return json({error:'생성 버튼을 통한 명시적 요청만 허용됩니다.'},400);
     const attempt=(count||0)+1;
     if(attempt>max)return json({error:`이번 회차는 최대 ${max}회까지 생성할 수 있습니다.`},409);
-    const reason='30개 숫자 무중복 분산 · 생일수·연속수·반복 패턴 회피',seed=crypto.randomUUID(),tickets=portfolio(draws,seed),encoded=new TextEncoder().encode(JSON.stringify({targetDraw,tickets,seed,version:VERSION})),contentHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',encoded))).map(x=>x.toString(16).padStart(2,'0')).join('');
+    const reason='1~45 균등 무작위 30개 · 5게임 간 번호 중복 없음',seed=crypto.randomUUID(),tickets=portfolio(draws,seed),encoded=new TextEncoder().encode(JSON.stringify({targetDraw,tickets,seed,version:VERSION})),contentHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',encoded))).map(x=>x.toString(16).padStart(2,'0')).join('');
     const inserted=await admin.from('prediction_batches').insert({user_id:user.id,target_draw:targetDraw,strategy_used:'randomCoverage',reason,seed,model_version:VERSION,history_end:historyEnd,attempt_no:attempt,max_attempts:max,content_hash:contentHash}).select().single();
     if(inserted.error)throw inserted.error;
     const ti=await admin.from('prediction_tickets').insert(tickets.map((numbers,i)=>({batch_id:inserted.data.id,ticket_no:i+1,numbers})));

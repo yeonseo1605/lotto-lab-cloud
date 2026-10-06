@@ -1,6 +1,14 @@
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
-import {json} from '../_shared/cors.ts';
-import {match,portfolio,prize,VERSION} from '../_shared/lotto.ts';
+const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
+
+type Draw={drawNo:number;numbers:number[];bonus:number};
+const VERSION='coverage-2.1.0';
+function hashSeed(s:string){let h=2166136261;for(const c of s){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
+function rng(seed:string){let a=hashSeed(seed);return()=>{a|=0;a=a+0x6D2B79F5|0;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+function partition(nums:number[],random:()=>number){const out=Array.from({length:5},()=>[] as number[]),sorted=[...nums].sort((a,b)=>a-b);for(let band=0;band<6;band++){const order=[0,1,2,3,4];for(let i=4;i;i--){const j=Math.floor(random()*(i+1));[order[i],order[j]]=[order[j],order[i]]}sorted.slice(band*5,band*5+5).forEach((n,i)=>out[order[i]].push(n))}return out.map(x=>x.sort((a,b)=>a-b))}
+function portfolio(_history:Draw[],seed:string){const random=rng(seed),pool=Array.from({length:45},(_,i)=>i+1);for(let i=44;i;i--){const j=Math.floor(random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]]}return partition(pool.slice(0,30),random)}
+const match=(a:number[],b:number[])=>a.filter(n=>b.includes(n)).length;
+function prize(ticket:number[],draw:Draw){const n=match(ticket,draw.numbers);if(n===6)return 1;if(n===5&&ticket.includes(draw.bonus))return 2;if(n===5)return 3;if(n===4)return 4;if(n===3)return 5;return null}
 
 const RESULT_URL='https://www.dhlottery.co.kr/lt645/result';
 const API_URL='https://www.dhlottery.co.kr/lt645/selectPstLt645InfoNew.do?srchDir=center&srchLtEpsd=';
@@ -46,7 +54,7 @@ Deno.serve(async req=>{
     let generated=0;
     // 매 재시도에서 빠진 사용자만 보충하므로 중간 실패 뒤에도 자동 생성이 복구된다.
     if(draws.length){
-      const targetDraw=historyEnd+1,reason='30개 숫자 무중복 분산 · 생일수·연속수·반복 패턴 회피';
+      const targetDraw=historyEnd+1,reason='1~45 균등 무작위 30개 · 5게임 간 번호 중복 없음';
       for(let pageNo=1;;pageNo++){const users=await admin.auth.admin.listUsers({page:pageNo,perPage:1000});if(users.error)throw users.error;for(const user of users.data.users){const exists=await admin.from('prediction_batches').select('id').eq('user_id',user.id).eq('target_draw',targetDraw).limit(1).maybeSingle();if(exists.error)throw exists.error;if(exists.data)continue;const setting=await admin.from('user_settings').select('max_generation_attempts').eq('user_id',user.id).maybeSingle();const seed=crypto.randomUUID(),tickets=portfolio(draws,seed),encoded=new TextEncoder().encode(JSON.stringify({targetDraw,tickets,seed,version:VERSION})),contentHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',encoded))).map(x=>x.toString(16).padStart(2,'0')).join('');const batch=await admin.from('prediction_batches').insert({user_id:user.id,target_draw:targetDraw,strategy_used:'randomCoverage',reason,seed,model_version:VERSION,history_end:historyEnd,attempt_no:1,max_attempts:setting.data?.max_generation_attempts||3,content_hash:contentHash}).select().single();if(batch.error)throw batch.error;const ti=await admin.from('prediction_tickets').insert(tickets.map((numbers,i)=>({batch_id:batch.data.id,ticket_no:i+1,numbers})));if(ti.error)throw ti.error;generated++}if(users.data.users.length<1000)break}
     }
     return json({ok:true,latest,previousLatest,added,scored,generated,targetDraw:historyEnd+1});
