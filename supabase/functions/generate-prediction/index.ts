@@ -1,6 +1,6 @@
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
 import {corsHeaders,json} from '../_shared/cors.ts';
-import {evaluate,portfolio,VERSION} from '../_shared/lotto.ts';
+import {portfolio,VERSION} from '../_shared/lotto.ts';
 
 Deno.serve(async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:corsHeaders});
@@ -26,13 +26,11 @@ Deno.serve(async req=>{
     if(body.action!=='generate')return json({error:'생성 버튼을 통한 명시적 요청만 허용됩니다.'},400);
     const attempt=(count||0)+1;
     if(attempt>max)return json({error:`이번 회차는 최대 ${max}회까지 생성할 수 있습니다.`},409);
-    let {data:ev}=await admin.from('strategy_evaluations').select('*').eq('history_end',historyEnd).maybeSingle();
-    if(!ev){const e=evaluate(draws),row={history_end:historyEnd,evaluated:e.evaluated,random_average:e.randomAverage,predictive_average:e.predictiveAverage,mean_difference:e.meanDifference,ci_low:e.ciLow,ci_high:e.ciHigh,p_value:e.pValue,recommended:e.recommended,reason:e.reason,model_version:VERSION};const saved=await admin.from('strategy_evaluations').upsert(row).select().single();if(saved.error)throw saved.error;ev=saved.data}
-    const seed=crypto.randomUUID(),predictive=ev.recommended==='predictiveCoverage',tickets=portfolio(draws,seed,predictive),encoded=new TextEncoder().encode(JSON.stringify({targetDraw,tickets,seed,version:VERSION})),contentHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',encoded))).map(x=>x.toString(16).padStart(2,'0')).join('');
-    const inserted=await admin.from('prediction_batches').insert({user_id:user.id,target_draw:targetDraw,strategy_used:ev.recommended,reason:ev.reason,seed,model_version:VERSION,history_end:historyEnd,attempt_no:attempt,max_attempts:max,content_hash:contentHash}).select().single();
+    const reason='30개 숫자 무중복 분산 · 생일수·연속수·반복 패턴 회피',seed=crypto.randomUUID(),tickets=portfolio(draws,seed),encoded=new TextEncoder().encode(JSON.stringify({targetDraw,tickets,seed,version:VERSION})),contentHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',encoded))).map(x=>x.toString(16).padStart(2,'0')).join('');
+    const inserted=await admin.from('prediction_batches').insert({user_id:user.id,target_draw:targetDraw,strategy_used:'randomCoverage',reason,seed,model_version:VERSION,history_end:historyEnd,attempt_no:attempt,max_attempts:max,content_hash:contentHash}).select().single();
     if(inserted.error)throw inserted.error;
     const ti=await admin.from('prediction_tickets').insert(tickets.map((numbers,i)=>({batch_id:inserted.data.id,ticket_no:i+1,numbers})));
     if(ti.error)throw ti.error;
-    return json({batchId:inserted.data.id,targetDraw,tickets,strategy:ev.recommended,strategyLabel:predictive?'검증 통과 예측 커버리지':'안전 무작위 커버리지',reason:ev.reason,attemptNo:attempt,maxAttempts:max,hash:contentHash});
+    return json({batchId:inserted.data.id,targetDraw,tickets,strategy:'randomCoverage',strategyLabel:'분산형 자동 조합',reason,attemptNo:attempt,maxAttempts:max,hash:contentHash});
   }catch(e){return json({error:e instanceof Error?e.message:String(e)},500)}
 });
