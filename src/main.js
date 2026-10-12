@@ -1,12 +1,14 @@
 import './styles.css'
 import './spacing.css'
 import './probability.css'
+import './ball-colors.css'
 import {supabase,configured} from './supabase.js'
 
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);let session=null,current=null
 const fmt=n=>(n||0).toLocaleString('ko-KR')
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2400)}
-function balls(nums,i){return `<div class="pick"><em>${i+1}</em>${nums.map(n=>`<span class="ball">${n}</span>`).join('')}</div>`}
+function ballColor(n){return n<=10?'yellow':n<=20?'blue':n<=30?'red':n<=40?'gray':'green'}
+function balls(nums,i){return `<div class="pick"><em>${i+1}</em>${nums.map(n=>`<span class="ball ball-${ballColor(Number(n))}">${n}</span>`).join('')}</div>`}
 function shell(){document.querySelector('#app').innerHTML=`<header><h1>LottoLab <small>CLOUD 2.0</small></h1><span id="status" class="status">연결 확인</span></header><nav><button class="active" data-page="pick">추천</button><button data-page="records">기록</button><button data-page="budget">예산</button><button data-page="settings">설정</button></nav><main>
 <section id="pick" class="page active"><div class="hero card"><div><span class="label">대상 회차</span><strong id="target">—</strong></div><div><span class="label">이번 회차 생성</span><strong id="attempts">0/3</strong></div></div><div class="card"><h2>확률 분산 최적화 5게임</h2><p class="muted">5게임 사이의 번호 중복을 없애 ‘한 게임이라도 5등 이상’이 될 확률을 높입니다.</p><div class="probability"><div><span>현재 방식</span><strong>11.8679%</strong><small>5등 이상 1게임 이상</small></div><div><span>매장 독립 자동 5게임</span><strong>11.3624%</strong><small>이론 평균</small></div><div class="gain"><span>확률 차이</span><strong>+0.5056%p</strong><small>상대 약 4.45% 개선</small></div></div><p class="probability-note">1등 확률은 두 방식 모두 5게임 기준 1/1,629,012로 같습니다.</p><button class="primary" id="generate" style="width:100%">확률 최적화 5게임 생성</button><div id="picks" class="picks"><p class="muted">아직 생성하지 않았습니다.</p></div><button id="lock" style="width:100%;margin-top:12px" disabled>추첨 전 최종 확정</button><p id="decision" class="muted"></p></div></section>
 <section id="records" class="page"><div class="card"><h2>생성 기록</h2><div class="prize-guide" aria-label="당첨 등수 안내"><h3>당첨 등수 안내</h3><div class="prize-row"><span class="rank rank-1">1등</span><span class="prize-condition"><i class="match-dots six"></i><b>6개 일치</b></span><strong>당첨금 변동</strong></div><div class="prize-row"><span class="rank rank-2">2등</span><span class="prize-condition"><i class="match-dots five-bonus"></i><b>5개 + 보너스</b></span><strong>당첨금 변동</strong></div><div class="prize-row"><span class="rank rank-3">3등</span><span class="prize-condition"><i class="match-dots five"></i><b>5개 일치</b></span><strong>1,500,000원</strong></div><div class="prize-row"><span class="rank rank-4">4등</span><span class="prize-condition"><i class="match-dots four"></i><b>4개 일치</b></span><strong>50,000원</strong></div><div class="prize-row"><span class="rank rank-5">5등</span><span class="prize-condition"><i class="match-dots three"></i><b>3개 일치</b></span><strong>5,000원</strong></div></div><div id="recordList"></div></div></section>
