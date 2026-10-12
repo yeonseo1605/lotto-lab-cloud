@@ -15,7 +15,7 @@ const API_URL='https://www.dhlottery.co.kr/lt645/selectPstLt645InfoNew.do?srchDi
 
 async function fetchRows(no:number){
   const r=await fetch(API_URL+no,{headers:{referer:RESULT_URL}});
-  if(!r.ok)throw new Error(`동행복권 API ${r.status} (${no}회)`);
+  if(!r.ok)throw new Error(`Lottery API ${r.status} (draw ${no})`);
   const x=await r.json(),list=Array.isArray(x)?x:(x.data?.list||x.data||[]);
   return Array.isArray(list)?list:[];
 }
@@ -24,16 +24,16 @@ Deno.serve(async req=>{
   try{
     if(req.headers.get('x-cron-secret')!==Deno.env.get('CRON_SECRET'))return json({error:'unauthorized'},401);
     const admin=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-    const page=await fetch(RESULT_URL).then(r=>{if(!r.ok)throw new Error(`동행복권 결과 페이지 ${r.status}`);return r.text()});
+    const page=await fetch(RESULT_URL).then(r=>{if(!r.ok)throw new Error(`Lottery result page ${r.status}`);return r.text()});
     const latest=+(page.match(/data-value="(\d+)"/)?.[1]||0);
-    if(!latest)throw new Error('최신 확정 회차를 확인하지 못했습니다.');
+    if(!latest)throw new Error('Could not determine the latest confirmed draw.');
     const {data:last,error:lastError}=await admin.from('lotto_draws').select('draw_no').order('draw_no',{ascending:false}).limit(1).maybeSingle();
     if(lastError)throw lastError;
     const previousLatest=last?.draw_no||0,start=previousLatest+1;
     let added=0;
     if(start<=latest){
       const requests:number[]=[];
-      // 응답은 요청 회차를 중심으로 최대 10개(대체로 -5..+4)를 돌려준다.
+      // The API returns up to ten draws around the requested draw number.
       for(let no=Math.min(start+4,latest);no<=latest;no+=10)requests.push(no);
       if(requests.at(-1)!==latest)requests.push(latest);
       for(let i=0;i<requests.length;i+=8){
@@ -46,15 +46,17 @@ Deno.serve(async req=>{
     const drawRows:any[]=[];
     for(let from=0;;from+=1000){const q=await admin.from('lotto_draws').select('draw_no,numbers,bonus').order('draw_no').range(from,from+999);if(q.error)throw q.error;drawRows.push(...(q.data||[]));if(!q.data||q.data.length<1000)break}
     const draws=drawRows.map(d=>({drawNo:d.draw_no,numbers:d.numbers,bonus:d.bonus})),historyEnd=draws.at(-1)?.drawNo||0;
-    if(historyEnd<latest)throw new Error(`회차 동기화 미완료: ${historyEnd}/${latest}`);
-    const {data:batches,error:batchError}=await admin.from('prediction_batches').select('id,target_draw,prediction_tickets(id,numbers)').in('status',['locked','purchased']).lte('target_draw',latest);
+    if(historyEnd<latest)throw new Error(`Draw synchronization incomplete: ${historyEnd}/${latest}`);
+    // Score every generated batch after its draw, regardless of confirmation state.
+    // This preserves comparable results for all batches instead of a delete action.
+    const {data:batches,error:batchError}=await admin.from('prediction_batches').select('id,target_draw,prediction_tickets(id,numbers)').in('status',['preview','locked','purchased','expired']).lte('target_draw',latest);
     if(batchError)throw batchError;
     let scored=0;
     for(const b of batches||[]){const d=draws.find(x=>x.drawNo===b.target_draw);if(!d)continue;const scores=b.prediction_tickets.map((t:any)=>({id:t.id,matches:match(t.numbers,d.numbers),prize:prize(t.numbers,d)}));for(const s of scores){const q=await admin.from('prediction_tickets').update({matches:s.matches,prize:s.prize}).eq('id',s.id);if(q.error)throw q.error}const wins=scores.map((s:any)=>s.prize).filter(Boolean),q=await admin.from('prediction_batches').update({status:'scored',scored_at:new Date().toISOString(),best_matches:Math.max(...scores.map((s:any)=>s.matches)),best_prize:wins.length?Math.min(...wins):null}).eq('id',b.id);if(q.error)throw q.error;scored++}
     let generated=0;
-    // 매 재시도에서 빠진 사용자만 보충하므로 중간 실패 뒤에도 자동 생성이 복구된다.
+    // Each retry fills only missing users, so partial failures recover automatically.
     if(draws.length){
-      const targetDraw=historyEnd+1,reason='5등 이상 11.8679% · 독립 자동 11.3624% · +0.5056%p';
+      const targetDraw=historyEnd+1,reason='5th+ 11.8679% | independent auto 11.3624% | +0.5056%p';
       for(let pageNo=1;;pageNo++){const users=await admin.auth.admin.listUsers({page:pageNo,perPage:1000});if(users.error)throw users.error;for(const user of users.data.users){const exists=await admin.from('prediction_batches').select('id').eq('user_id',user.id).eq('target_draw',targetDraw).limit(1).maybeSingle();if(exists.error)throw exists.error;if(exists.data)continue;const setting=await admin.from('user_settings').select('max_generation_attempts').eq('user_id',user.id).maybeSingle();const seed=crypto.randomUUID(),tickets=portfolio(draws,seed),encoded=new TextEncoder().encode(JSON.stringify({targetDraw,tickets,seed,version:VERSION})),contentHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',encoded))).map(x=>x.toString(16).padStart(2,'0')).join('');const batch=await admin.from('prediction_batches').insert({user_id:user.id,target_draw:targetDraw,strategy_used:'randomCoverage',reason,seed,model_version:VERSION,history_end:historyEnd,attempt_no:1,max_attempts:setting.data?.max_generation_attempts||3,content_hash:contentHash}).select().single();if(batch.error)throw batch.error;const ti=await admin.from('prediction_tickets').insert(tickets.map((numbers,i)=>({batch_id:batch.data.id,ticket_no:i+1,numbers})));if(ti.error)throw ti.error;generated++}if(users.data.users.length<1000)break}
     }
     return json({ok:true,latest,previousLatest,added,scored,generated,targetDraw:historyEnd+1});
